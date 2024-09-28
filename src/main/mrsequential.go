@@ -18,6 +18,7 @@ import "sort"
 type ByKey []mr.KeyValue
 
 // for sorting by key.
+//(a ByKey)是Bykey的一个方法,Bykey可以进行调用
 func (a ByKey) Len() int           { return len(a) }
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
@@ -28,6 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	//从wc.so中加载map和reduce函数
 	mapf, reducef := loadPlugin(os.Args[1])
 
 	//
@@ -56,6 +58,7 @@ func main() {
 	// rather than being partitioned into NxM buckets.
 	//
 
+	//根据上述添加的ByKey的len，swap和Less根据key进行分区排序
 	sort.Sort(ByKey(intermediate))
 
 	oname := "mr-out-0"
