@@ -10,7 +10,7 @@ import "sync"
 import "io/ioutil"
 import "strconv"
 import "strings"
-
+import "time"
 var mu sync.Mutex
 
 // for sorting by key.
@@ -58,6 +58,7 @@ const (
 type TaskMetaInfo struct {
 	state     State     // 任务的状态
 	TaskAdr   *Task     // 传入任务的指针,为的是这个任务从通道中取出来后，还能通过地址标记这个任务已经完成
+	StartTime time.Time // 任务的开始时间，为crash做准备
 }
 
 // TaskMetaHolder 保存全部任务的元数据
@@ -117,6 +118,8 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.MakeMapTasks(files)
 
 	c.server()
+
+	go c.CrashHandler()
 	return &c
 }
 
@@ -207,6 +210,7 @@ func (t *TaskMetaHolder) judgeState(taskId int) bool {
 		return false
 	}
 	taskInfo.state = Working
+	taskInfo.StartTime = time.Now()
 	return true
 }
 
@@ -240,7 +244,6 @@ func (t *TaskMetaHolder) checkTaskDone() bool {
 
 	}
 	// 如果某一个map或者reduce全部做完了，代表需要切换下一阶段，返回true
-	// R
 	if (mapDoneNum > 0 && mapUnDoneNum == 0) && (reduceDoneNum == 0 && reduceUnDoneNum == 0) {
 		return true
 	} else {
@@ -355,8 +358,6 @@ func (c *Coordinator) MarkDone(args *Task, reply *TaskArgs) error {
 		if ok && meta.state == Working {
 			meta.state = Done
 			//fmt.Printf("Map task Id[%d] is finished.", args.TaskId)
-		} else {
-			//fmt.Printf("Map task Id[%d] is finished,already ! ! !\n", args.TaskId)
 		}
 	case ReduceTask:
 		meta, ok := c.taskMetaHolder.MetaMap[args.TaskId]
@@ -364,11 +365,39 @@ func (c *Coordinator) MarkDone(args *Task, reply *TaskArgs) error {
 		if ok && meta.state == Working {
 			meta.state = Done
 			//fmt.Printf("Reduce task Id[%d] is finished.", args.TaskId)
-		} else {
-			//fmt.Printf("Reduce task Id[%d] is finished,already ! ! !\n", args.TaskId)
 		}
 	default:
 		panic("The task type undefined ! ! !")
 	}
 	return nil
+}
+
+
+func (c *Coordinator) CrashHandler() {
+	for {
+		time.Sleep(time.Second * 2) //防止一直获取锁，造成pulltask获取不到锁
+		mu.Lock()
+		if c.DistPhase == AllDone {
+			mu.Unlock()
+			break
+		}
+
+		for _, v := range c.taskMetaHolder.MetaMap {
+			if v.state == Working && time.Since(v.StartTime) > 9*time.Second {
+				//fmt.Printf("the task[ %d ] is crash,take [%d] s\n", v.TaskAdr.TaskId, time.Since(v.StartTime))
+
+				switch v.TaskAdr.TaskType {
+				case MapTask:
+					c.MapChan <- v.TaskAdr
+					v.state = Waiting
+				case ReduceTask:
+					c.ReduceChan <- v.TaskAdr
+					v.state = Waiting
+
+				}
+			}
+		}
+		mu.Unlock()
+	}
+
 }

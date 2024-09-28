@@ -34,7 +34,6 @@ func ihash(key string) int {
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-
 	//my code
 	alive := true
 	for alive {
@@ -49,11 +48,9 @@ func Worker(mapf func(string, string) []KeyValue,
 			callDone(task)
 		}
 		case ExitTask: {
-			//fmt.Println("All tasks are completed!")
 			alive = false
 		}
 		case WaittingTask: {
-			//fmt.Println("All tasks are in progress, please wait...")
 			time.Sleep(time.Second)
 		}
 		}
@@ -67,15 +64,11 @@ func GetTask() Task {
     args := TaskArgs{} // 为空
     reply := Task{}
     
-    // 先调用 call 函数
+    // 调用 call 函数
     ok := call("Coordinator.PullTask", &args, &reply)
     
-    // 然后检查返回值
-    if ok {
-		if reply.TaskType != WaittingTask && reply.TaskType != ExitTask{
-			//fmt.Printf("reply TaskId is %d\n", reply.TaskId)
-		}
-    } else {
+    // 检查返回值
+    if !ok {
         fmt.Printf("call failed!")
     }
     
@@ -156,9 +149,7 @@ func callDone(task Task) {
 	reply := TaskArgs{}
 	ok := call("Coordinator.MarkDone", &args, &reply)
 
-	if ok {
-		//fmt.Println("task", task.TaskId, "完成")
-	} else {
+	if !ok {
 		fmt.Printf("call failed!\n")
 	}
 }
